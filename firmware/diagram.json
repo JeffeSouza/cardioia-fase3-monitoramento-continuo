@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "author": "Jefferson de Souza Oliveira",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht", "top": -105.3, "left": 150, "attrs": { "temperature": "36.5", "humidity": "55" } },
+    { "type": "wokwi-pushbutton", "id": "beat", "top": 134.4, "left": 220, "attrs": { "color": "red", "label": "Batimento", "key": "b", "bounce": "0" } },
+    { "type": "wokwi-slide-switch", "id": "wifi", "top": 45, "left": 240, "attrs": {} },
+    { "type": "wokwi-led", "id": "ledOn", "top": -40, "left": 300, "attrs": { "color": "green", "label": "Online" } },
+    { "type": "wokwi-led", "id": "ledAl", "top": -40, "left": 360, "attrs": { "color": "red", "label": "Alerta" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": 40, "left": 300, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r2", "top": 40, "left": 360, "rotate": 90, "attrs": { "value": "220" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "dht:VCC", "esp:3V3", "red", [] ],
+    [ "dht:GND", "esp:GND.2", "black", [] ],
+    [ "dht:SDA", "esp:15", "green", [] ],
+    [ "beat:1.l", "esp:4", "orange", [] ],
+    [ "beat:2.l", "esp:GND.3", "black", [] ],
+    [ "wifi:2", "esp:18", "blue", [] ],
+    [ "wifi:1", "esp:GND.2", "black", [] ],
+    [ "ledOn:A", "r1:1", "green", [] ],
+    [ "r1:2", "esp:19", "green", [] ],
+    [ "ledOn:C", "esp:GND.2", "black", [] ],
+    [ "ledAl:A", "r2:1", "red", [] ],
+    [ "r2:2", "esp:21", "red", [] ],
+    [ "ledAl:C", "esp:GND.2", "black", [] ]
+  ],
+  "dependencies": {}
+}

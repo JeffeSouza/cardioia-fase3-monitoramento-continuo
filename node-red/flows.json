@@ -1,0 +1,487 @@
+[
+  {
+    "id": "cardioia_flow",
+    "type": "tab",
+    "label": "CardioIA - Monitoramento",
+    "disabled": false,
+    "info": "ESP32 -> broker publico da HiveMQ (TLS) -> Node-RED. Dados simulados."
+  },
+  {
+    "id": "cardioia_tls",
+    "type": "tls-config",
+    "name": "TLS broker publico",
+    "cert": "",
+    "key": "",
+    "ca": "",
+    "certname": "",
+    "keyname": "",
+    "caname": "",
+    "servername": "broker.hivemq.com",
+    "verifyservercert": true,
+    "alpnprotocol": ""
+  },
+  {
+    "id": "cardioia_broker",
+    "type": "mqtt-broker",
+    "name": "HiveMQ publico",
+    "broker": "broker.hivemq.com",
+    "port": "8883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": true,
+    "tls": "cardioia_tls",
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": ""
+  },
+  {
+    "id": "cardioia_ui_tab",
+    "type": "ui_tab",
+    "name": "CardioIA",
+    "icon": "favorite",
+    "order": 1,
+    "disabled": false,
+    "hidden": false
+  },
+  {
+    "id": "g_alerta",
+    "type": "ui_group",
+    "name": "Estado do paciente",
+    "tab": "cardioia_ui_tab",
+    "order": 1,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "g_vitais",
+    "type": "ui_group",
+    "name": "Sinais vitais",
+    "tab": "cardioia_ui_tab",
+    "order": 2,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "g_tendencia",
+    "type": "ui_group",
+    "name": "Batimentos",
+    "tab": "cardioia_ui_tab",
+    "order": 3,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "g_temp",
+    "type": "ui_group",
+    "name": "Temperatura",
+    "tab": "cardioia_ui_tab",
+    "order": 4,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "g_historico",
+    "type": "ui_group",
+    "name": "Histórico de alertas",
+    "tab": "cardioia_ui_tab",
+    "order": 5,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "in_vitals",
+    "type": "mqtt in",
+    "z": "cardioia_flow",
+    "name": "cardioia/cardioia-7f3a9c/vitals",
+    "topic": "cardioia/cardioia-7f3a9c/vitals",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "cardioia_broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 190,
+    "y": 200,
+    "wires": [
+      [
+        "fn_process"
+      ]
+    ]
+  },
+  {
+    "id": "in_backlog",
+    "type": "mqtt in",
+    "z": "cardioia_flow",
+    "name": "cardioia/cardioia-7f3a9c/backlog",
+    "topic": "cardioia/cardioia-7f3a9c/backlog",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "cardioia_broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 190,
+    "y": 260,
+    "wires": [
+      [
+        "fn_process"
+      ]
+    ]
+  },
+  {
+    "id": "in_status",
+    "type": "mqtt in",
+    "z": "cardioia_flow",
+    "name": "cardioia/cardioia-7f3a9c/status",
+    "topic": "cardioia/cardioia-7f3a9c/status",
+    "qos": "1",
+    "datatype": "utf8",
+    "broker": "cardioia_broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 190,
+    "y": 620,
+    "wires": [
+      [
+        "fn_status"
+      ]
+    ]
+  },
+  {
+    "id": "fn_process",
+    "type": "function",
+    "z": "cardioia_flow",
+    "name": "Avaliar limites",
+    "func": "// Fog: valida a mensagem, aplica os limites clinicos e distribui para o painel.\nconst LIMITS = { bpmMax: 120, bpmMin: 50, tempMax: 38 };\nconst MAX_EVENTS = 8;\n\n// O broker e publico: qualquer pessoa pode publicar neste topico. Por isso, so entram\n// mensagens do dispositivo esperado, com tipos e faixas plausiveis.\nconst d = msg.payload;\nconst faixa = (v, min, max) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;\nconst agora = Date.now() / 1000;\nconst valida = d !== null && typeof d === 'object'\n    && d.device === 'cardioia-7f3a9c'\n    && faixa(d.bpm, 0, 300)\n    && (d.temp === null || faixa(d.temp, -40, 80))\n    && (d.hum === null || faixa(d.hum, 0, 100))\n    && (d.ts === 0 || faixa(d.ts, agora - 7 * 86400, agora + 3600))\n    && faixa(d.queue, 0, 100000)\n    && faixa(d.dropped, 0, 4294967295);\nif (!valida) {\n    node.warn('Mensagem invalida ignorada');\n    return null;\n}\n\nconst backlog = msg.topic.endsWith('/backlog');\nconst ts = d.ts ? d.ts * 1000 : Date.now();  // ts 0 = dispositivo ainda sem NTP\nconst hora = new Date(ts).toLocaleTimeString('pt-BR');\n\n// Regras de alerta\nconst problemas = [], tipos = [];\nif (d.bpm > LIMITS.bpmMax) { tipos.push('T'); problemas.push(`Taquicardia: ${d.bpm} bpm`); }\nif (d.bpm > 0 && d.bpm < LIMITS.bpmMin) { tipos.push('B'); problemas.push(`Bradicardia: ${d.bpm} bpm`); }\nif (d.temp !== null && d.temp > LIMITS.tempMax) { tipos.push('F'); problemas.push(`Febre: ${d.temp} °C`); }\n\n// Saidas: 0 grafico BPM, 1 grafico temp, 2 gauge BPM, 3 gauge temp, 4 gauge umidade,\n//         5 indicador de alerta, 6 telemetria, 7 historico\nconst out = new Array(8).fill(null);\n\n// Graficos recebem tambem o backlog, cada ponto no horario real da captura.\nif (d.bpm > 0) out[0] = { topic: 'BPM', payload: d.bpm, timestamp: ts };\nif (d.temp !== null) out[1] = { topic: 'Temperatura', payload: d.temp, timestamp: ts };\n\n// Historico: registra so o inicio de cada alerta, comparando o tipo e nao o valor.\n// Ordena pelo horario da captura, pois o backlog chega depois de leituras mais recentes.\nconst estado = problemas.join(' | ');\nconst tipoAtual = tipos.join('+');\nconst chave = backlog ? 'ultimoBacklog' : 'ultimoAoVivo';\nif (tipoAtual && tipoAtual !== flow.get(chave)) {\n    const eventos = flow.get('eventos') || [];\n    eventos.push({ ts, hora, texto: estado, origem: backlog ? 'sincronizado' : 'ao vivo' });\n    eventos.sort((a, b) => b.ts - a.ts);\n    eventos.length = Math.min(eventos.length, MAX_EVENTS);\n    flow.set('eventos', eventos);\n    out[7] = { payload: eventos };\n}\nflow.set(chave, tipoAtual);\n\n// Dado antigo nao altera gauges nem o alerta atual: eles mostram o estado do paciente agora.\nif (!backlog) {\n    out[2] = { payload: d.bpm };\n    if (d.temp !== null) out[3] = { payload: d.temp };\n    if (d.hum !== null) out[4] = { payload: d.hum };\n\n    let nivel = 'ok', texto = 'Sinais dentro dos limites';\n    if (problemas.length) { nivel = 'alerta'; texto = estado; }\n    else if (d.bpm === 0) { nivel = 'atencao'; texto = 'Sem sinal de batimento'; }\n    out[5] = { payload: { nivel, texto, hora } };\n}\n\nconst sincronizadas = (flow.get('sincronizadas') || 0) + (backlog ? 1 : 0);\nflow.set('sincronizadas', sincronizadas);\nout[6] = { payload: `Fila no dispositivo: ${d.queue} | Sincronizadas: ${sincronizadas} | Descartadas: ${d.dropped}` };\n\nreturn out;\n",
+    "outputs": 8,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 460,
+    "y": 230,
+    "wires": [
+      [
+        "ch_bpm"
+      ],
+      [
+        "ch_temp"
+      ],
+      [
+        "gg_bpm"
+      ],
+      [
+        "gg_temp"
+      ],
+      [
+        "gg_hum"
+      ],
+      [
+        "tp_alert"
+      ],
+      [
+        "tx_tele"
+      ],
+      [
+        "tp_hist"
+      ]
+    ]
+  },
+  {
+    "id": "fn_status",
+    "type": "function",
+    "z": "cardioia_flow",
+    "name": "Status do dispositivo",
+    "func": "if (msg.payload !== 'online' && msg.payload !== 'offline') return null;\nconst online = msg.payload === 'online';\nmsg.payload = { online, texto: online ? 'Dispositivo online' : 'Dispositivo offline' };\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 460,
+    "y": 620,
+    "wires": [
+      [
+        "tp_status"
+      ]
+    ]
+  },
+  {
+    "id": "ch_bpm",
+    "type": "ui_chart",
+    "z": "cardioia_flow",
+    "name": "Batimentos cardíacos (bpm)",
+    "group": "g_tendencia",
+    "order": 1,
+    "width": 12,
+    "height": 5,
+    "label": "Batimentos cardíacos (bpm)",
+    "chartType": "line",
+    "legend": "false",
+    "xformat": "HH:mm:ss",
+    "interpolate": "linear",
+    "nodata": "Aguardando dados",
+    "dot": true,
+    "ymin": "0",
+    "ymax": "300",
+    "removeOlder": "30",
+    "removeOlderPoints": "",
+    "removeOlderUnit": "60",
+    "cutout": 0,
+    "useOneColor": false,
+    "useUTC": false,
+    "colors": [
+      "#d62828",
+      "#1f77b4",
+      "#ff7f0e",
+      "#2ca02c",
+      "#98df8a",
+      "#9467bd",
+      "#ff9896",
+      "#9467bd",
+      "#c5b0d5"
+    ],
+    "outputs": 1,
+    "useDifferentColor": false,
+    "className": "",
+    "x": 760,
+    "y": 60,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ch_temp",
+    "type": "ui_chart",
+    "z": "cardioia_flow",
+    "name": "Temperatura (°C)",
+    "group": "g_temp",
+    "order": 1,
+    "width": 12,
+    "height": 5,
+    "label": "Temperatura (°C)",
+    "chartType": "line",
+    "legend": "false",
+    "xformat": "HH:mm:ss",
+    "interpolate": "linear",
+    "nodata": "Aguardando dados",
+    "dot": true,
+    "ymin": "34",
+    "ymax": "41",
+    "removeOlder": "30",
+    "removeOlderPoints": "",
+    "removeOlderUnit": "60",
+    "cutout": 0,
+    "useOneColor": false,
+    "useUTC": false,
+    "colors": [
+      "#d62828",
+      "#1f77b4",
+      "#ff7f0e",
+      "#2ca02c",
+      "#98df8a",
+      "#9467bd",
+      "#ff9896",
+      "#9467bd",
+      "#c5b0d5"
+    ],
+    "outputs": 1,
+    "useDifferentColor": false,
+    "className": "",
+    "x": 760,
+    "y": 120,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "gg_bpm",
+    "type": "ui_gauge",
+    "z": "cardioia_flow",
+    "name": "Batimentos",
+    "group": "g_vitais",
+    "order": 1,
+    "width": 4,
+    "height": 4,
+    "gtype": "gage",
+    "title": "Batimentos",
+    "label": "bpm",
+    "format": "{{value}}",
+    "min": 0,
+    "max": 300,
+    "colors": [
+      "#2e9e5b",
+      "#e0a100",
+      "#d62828"
+    ],
+    "seg1": 120,
+    "seg2": 180,
+    "diff": false,
+    "className": "",
+    "x": 760,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "gg_temp",
+    "type": "ui_gauge",
+    "z": "cardioia_flow",
+    "name": "Temperatura",
+    "group": "g_vitais",
+    "order": 2,
+    "width": 4,
+    "height": 4,
+    "gtype": "gage",
+    "title": "Temperatura",
+    "label": "°C",
+    "format": "{{value}}",
+    "min": 34,
+    "max": 42,
+    "colors": [
+      "#2e9e5b",
+      "#e0a100",
+      "#d62828"
+    ],
+    "seg1": 38,
+    "seg2": 39.5,
+    "diff": false,
+    "className": "",
+    "x": 760,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "gg_hum",
+    "type": "ui_gauge",
+    "z": "cardioia_flow",
+    "name": "Umidade",
+    "group": "g_vitais",
+    "order": 3,
+    "width": 4,
+    "height": 4,
+    "gtype": "gage",
+    "title": "Umidade",
+    "label": "%",
+    "format": "{{value}}",
+    "min": 0,
+    "max": 100,
+    "colors": [
+      "#2e9e5b",
+      "#e0a100",
+      "#d62828"
+    ],
+    "seg1": 70,
+    "seg2": 90,
+    "diff": false,
+    "className": "",
+    "x": 760,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "tp_alert",
+    "type": "ui_template",
+    "z": "cardioia_flow",
+    "group": "g_alerta",
+    "name": "LED virtual de alerta",
+    "order": 1,
+    "width": 8,
+    "height": 2,
+    "format": "<style>\n.cardio-alert{display:flex;align-items:center;gap:14px;width:100%;padding:8px;box-sizing:border-box}\n.cardio-led{width:30px;height:30px;border-radius:50%;flex:none;background:#2e9e5b}\n.cardio-alert.atencao .cardio-led{background:#e0a100}\n.cardio-alert.alerta .cardio-led{background:#d62828;box-shadow:0 0 14px #d62828;animation:cardioPisca 1s infinite}\n.cardio-alert b{display:block;font-size:17px;line-height:1.25}\n.cardio-alert small{opacity:.7}\n@keyframes cardioPisca{50%{opacity:.35}}\n</style>\n<div class=\"cardio-alert {{msg.payload.nivel}}\">\n  <div class=\"cardio-led\"></div>\n  <div><b>{{msg.payload.texto || 'Aguardando dados'}}</b><small ng-if=\"msg.payload.hora\">Leitura das {{msg.payload.hora}}</small></div>\n</div>\n",
+    "storeOutMessages": true,
+    "fwdInMessages": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 760,
+    "y": 360,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "tp_status",
+    "type": "ui_template",
+    "z": "cardioia_flow",
+    "group": "g_alerta",
+    "name": "Conectividade",
+    "order": 2,
+    "width": 4,
+    "height": 2,
+    "format": "<style>\n.cardio-status{display:flex;align-items:center;gap:10px;width:100%;padding:4px 8px;box-sizing:border-box}\n.cardio-status i{width:16px;height:16px;border-radius:50%;background:#8a8a8a}\n.cardio-status.on i{background:#2e9e5b}\n.cardio-status.off i{background:#d62828}\n</style>\n<div class=\"cardio-status\" ng-class=\"{on: msg.payload.online === true, off: msg.payload.online === false}\">\n  <i></i><b>{{msg.payload.texto || 'Aguardando status'}}</b>\n</div>\n",
+    "storeOutMessages": true,
+    "fwdInMessages": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 760,
+    "y": 620,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "tx_tele",
+    "type": "ui_text",
+    "z": "cardioia_flow",
+    "group": "g_alerta",
+    "order": 3,
+    "width": 12,
+    "height": 1,
+    "name": "Telemetria",
+    "label": "",
+    "format": "{{msg.payload}}",
+    "layout": "row-left",
+    "className": "",
+    "x": 760,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "tp_hist",
+    "type": "ui_template",
+    "z": "cardioia_flow",
+    "group": "g_historico",
+    "name": "Historico",
+    "order": 1,
+    "width": 12,
+    "height": 5,
+    "format": "<style>\n.cardio-hist{width:100%;border-collapse:collapse;font-size:13px}\n.cardio-hist td,.cardio-hist th{padding:4px 6px;text-align:left;border-bottom:1px solid rgba(128,128,128,.3)}\n</style>\n<p ng-if=\"!msg.payload.length\" style=\"padding:4px 6px;opacity:.7\">Nenhum alerta registrado</p>\n<table class=\"cardio-hist\" ng-if=\"msg.payload.length\">\n  <tr><th>Hora</th><th>Alerta</th><th>Origem</th></tr>\n  <tr ng-repeat=\"e in msg.payload\"><td>{{e.hora}}</td><td>{{e.texto}}</td><td>{{e.origem}}</td></tr>\n</table>\n",
+    "storeOutMessages": true,
+    "fwdInMessages": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 760,
+    "y": 480,
+    "wires": [
+      []
+    ]
+  }
+]
